@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   register,
   verifyEmail,
+  resendVerification,
   login,
   getMe,
   forgotPassword,
@@ -13,6 +14,7 @@ const { protect } = require('../middleware/authMiddleware');
 // Public authentication routes
 router.post('/register', register);
 router.get('/verify-email/:token', verifyEmail);
+router.post('/resend-verification', resendVerification);
 router.post('/login', login);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password/:token', resetPassword);

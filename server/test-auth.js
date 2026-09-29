@@ -170,11 +170,46 @@ async function runTests() {
     await User.updateOne({ email: testEmail }, { verificationTokenExpiry: new Date(Date.now() + 100000) });
   }
 
-  // Test 3.3: Valid verification token
+  // Test 3.3: Resend verification with non-existent email
+  {
+    const res = await request('/resend-verification', {
+      method: 'POST',
+      body: { email: 'nonexistent_resend@example.com' }
+    });
+    assert(res.status === 404 && res.data.message.includes('No account found'),
+      'Resend verification rejects non-existent email with 404');
+  }
+
+  // Test 3.4: Resend verification for unverified account generates fresh token
+  let newVerificationToken = '';
+  {
+    const res = await request('/resend-verification', {
+      method: 'POST',
+      body: { email: testEmail }
+    });
+    assert(res.status === 200 && res.data.success === true,
+      'Resend verification returns 200 OK');
+
+    const updatedUser = await User.findOne({ email: testEmail });
+    assert(updatedUser.verificationToken !== verificationToken,
+      'Old verification token was replaced by a fresh token');
+    assert(updatedUser.verificationTokenExpiry > new Date(),
+      'New verification token has a fresh future expiry time');
+
+    newVerificationToken = updatedUser.verificationToken;
+  }
+
+  // Test 3.5: Old verification token is now rejected (invalidated)
   {
     const res = await request(`/verify-email/${verificationToken}`);
+    assert(res.status === 400, 'Old verification token is rejected with 400 after replacement');
+  }
+
+  // Test 3.6: New verification token successfully verifies account
+  {
+    const res = await request(`/verify-email/${newVerificationToken}`);
     assert(res.status === 200 && res.data.success === true,
-      'Valid verification token succeeds with 200 OK');
+      'New verification token succeeds with 200 OK');
 
     const verifiedUser = await User.findOne({ email: testEmail });
     assert(verifiedUser.isVerified === true, 'User is marked verified (isVerified: true) in MongoDB');
@@ -182,10 +217,20 @@ async function runTests() {
     assert(verifiedUser.verificationTokenExpiry === undefined, 'Verification token expiry is cleared in MongoDB');
   }
 
-  // Test 3.4: Reused verification token
+  // Test 3.7: Reused new verification token is rejected
   {
-    const res = await request(`/verify-email/${verificationToken}`);
+    const res = await request(`/verify-email/${newVerificationToken}`);
     assert(res.status === 400, 'Reused verification token rejected with 400 (Token invalidation)');
+  }
+
+  // Test 3.8: Resend verification on already verified account is rejected
+  {
+    const res = await request('/resend-verification', {
+      method: 'POST',
+      body: { email: testEmail }
+    });
+    assert(res.status === 400 && res.data.message.includes('already been verified'),
+      'Resend verification for already verified user rejected with 400');
   }
 
   // ----------------------------------------------------

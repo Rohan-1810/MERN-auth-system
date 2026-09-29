@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { verifyEmailToken } from '../services/api';
+import { verifyEmailToken, resendVerificationEmail } from '../services/api';
 
 const VerifyEmail = () => {
   const { token: paramToken } = useParams();
@@ -11,6 +11,10 @@ const VerifyEmail = () => {
   const [status, setStatus] = useState('idle'); // 'idle' | 'verifying' | 'success' | 'error'
   const [message, setMessage] = useState('');
   const [manualToken, setManualToken] = useState('');
+
+  const [resendEmail, setResendEmail] = useState('');
+  const [resending, setResending] = useState(false);
+  const [resendStatus, setResendStatus] = useState(null); // { type: 'success'|'error', text: '' }
 
   const performVerification = async (tokenToVerify) => {
     if (!tokenToVerify) return;
@@ -41,6 +45,29 @@ const VerifyEmail = () => {
     }
   };
 
+  const handleResend = async (e) => {
+    e.preventDefault();
+    if (!resendEmail.trim()) return;
+
+    try {
+      setResending(true);
+      setResendStatus(null);
+      const res = await resendVerificationEmail(resendEmail.trim());
+      setResendStatus({
+        type: 'success',
+        text: res.data.message || 'New verification email sent successfully!'
+      });
+      setResendEmail('');
+    } catch (err) {
+      setResendStatus({
+        type: 'error',
+        text: err.customMessage || 'Failed to resend verification email.'
+      });
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
     <div className="auth-card-wrapper">
       <div className="auth-card">
@@ -67,7 +94,47 @@ const VerifyEmail = () => {
           <div className="verification-state">
             <div className="status-icon error-icon">&#10007;</div>
             <div className="alert alert-error">{message}</div>
-            <div className="action-row">
+
+            <div style={{ marginTop: '16px', textAlign: 'left' }}>
+              <p
+                style={{
+                  fontSize: '0.85rem',
+                  color: 'var(--text-muted)',
+                  marginBottom: '8px'
+                }}
+              >
+                Need a fresh verification link? Enter your email address:
+              </p>
+              <form onSubmit={handleResend} style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={resendEmail}
+                  onChange={(e) => setResendEmail(e.target.value)}
+                  required
+                  style={{ flex: 1 }}
+                />
+                <button type="submit" className="btn-secondary" disabled={resending}>
+                  {resending ? 'Sending...' : 'Resend'}
+                </button>
+              </form>
+              {resendStatus && (
+                <div
+                  style={{
+                    marginTop: '8px',
+                    fontSize: '0.85rem',
+                    color:
+                      resendStatus.type === 'success'
+                        ? 'var(--success)'
+                        : 'var(--error)'
+                  }}
+                >
+                  {resendStatus.text}
+                </div>
+              )}
+            </div>
+
+            <div className="action-row" style={{ marginTop: '20px' }}>
               <Link to="/login" className="btn-secondary">
                 Back to Login
               </Link>

@@ -3,9 +3,9 @@ const nodemailer = require('nodemailer');
 /**
  * Utility to send emails via Nodemailer.
  * Supports configured SMTP server or falls back to an Ethereal test account for local testing.
- * Also prints the direct action link to the console for quick testing and demonstration.
+ * In development mode, clearly prints Ethereal preview URLs and actual application action links.
  */
-const sendEmail = async ({ to, subject, html, text }) => {
+const sendEmail = async ({ to, subject, html, text, emailType, actionUrl }) => {
   let transporter;
 
   // Check if custom SMTP credentials are provided in environment
@@ -42,11 +42,28 @@ const sendEmail = async ({ to, subject, html, text }) => {
   };
 
   const info = await transporter.sendMail(mailOptions);
-
-  console.log(`[Email Delivered] Message ID: ${info.messageId}`);
   const previewUrl = nodemailer.getTestMessageUrl(info);
-  if (previewUrl) {
-    console.log(`[Ethereal Inbox Preview]: ${previewUrl}`);
+
+  // In development mode, format terminal output cleanly for direct testing
+  if (process.env.NODE_ENV !== 'production') {
+    if (emailType && actionUrl) {
+      const isReset = emailType.toUpperCase().includes('RESET');
+      const label = isReset ? 'Password Reset Link:' : 'Verification Link:';
+
+      console.log('\n========================================');
+      console.log(`EMAIL SENT - ${emailType.toUpperCase()}`);
+      console.log('========================================');
+      console.log('Preview URL:');
+      console.log(previewUrl || 'No preview URL available (custom SMTP configured)');
+      console.log(`\n${label}`);
+      console.log(actionUrl);
+      console.log('========================================\n');
+    } else {
+      console.log(`[Email Delivered] Message ID: ${info.messageId}`);
+      if (previewUrl) {
+        console.log(`[Ethereal Inbox Preview]: ${previewUrl}`);
+      }
+    }
   }
 
   return {

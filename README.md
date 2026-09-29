@@ -1,6 +1,6 @@
 # MERN Authentication System
 
-A secure, modular, student-level authentication application built from scratch using the **MERN Stack** (MongoDB, Express.js, React.js, Node.js). This project implements real-world authentication patterns including **JWT-based authorization**, **bcrypt password hashing**, **email verification**, **password reset via secure token links**, and **route protection** on both frontend and backend.
+A secure, modular, student-level authentication application built from scratch using the **MERN Stack** (MongoDB, Express.js, React.js, Node.js). This project implements real-world authentication patterns including **JWT-based authorization**, **bcrypt password hashing**, **email verification**, **resending verification emails**, **password reset via secure token links**, and **route protection** on both frontend and backend.
 
 Designed specifically to demonstrate core full-stack security concepts for technical interviews.
 
@@ -10,12 +10,14 @@ Designed specifically to demonstrate core full-stack security concepts for techn
 
 - **User Registration**: Client and server-side validation, password confirmation check, duplicate email prevention, and bcrypt password hashing.
 - **Email Verification**: Cryptographically secure random tokens (`crypto.randomBytes`) with 24-hour expiration sent via Nodemailer. Unverified accounts cannot log in.
+- **Resend Verification Email**: Unverified users with expired or misplaced links can request a fresh verification email. Old tokens are replaced and invalidated immediately.
 - **User Login & JWT Generation**: Credential verification using `bcrypt.compare`, verification check, and signed JSON Web Token (JWT) generation.
 - **Client-Side Authentication State**: React `AuthContext` preserving session across page refreshes via `localStorage` with Axios request interceptor for `Authorization: Bearer <token>` injection.
 - **Protected Routes (Backend & Frontend)**:
   - Backend: Custom Express `protect` middleware verifying JWT signatures, extracting user ID, and attaching `req.user` (excluding password).
-  - Frontend: React Router `ProtectedRoute` component redirecting unauthenticated users to `/login`.
+  - Frontend: React Router `ProtectedRoute` component redirecting unauthenticated visitors to `/login`.
 - **Password Reset Flow**: Secure token-based password reset via email link with 1-hour expiration and automatic token invalidation upon successful reset.
+- **Development Email Logging**: In development mode, the terminal displays formatted banners with both the Ethereal inbox preview URL and the direct application action link.
 - **Robust Error Handling**: Standard HTTP status codes (200, 201, 400, 401, 403, 404, 409, 500) and user-friendly error banners.
 
 ---
@@ -54,14 +56,14 @@ mern-authentication-system/
 │   │   ├── context/
 │   │   │   └── AuthContext.jsx # React context managing user & token state
 │   │   ├── pages/              # Authentication view pages
-│   │   │   ├── Login.jsx       # User login page
+│   │   │   ├── Login.jsx       # User login & resend verification trigger
 │   │   │   ├── Register.jsx    # Registration with input validation
-│   │   │   ├── VerifyEmail.jsx # Email verification landing page
+│   │   │   ├── VerifyEmail.jsx # Email verification landing page & resend fallback
 │   │   │   ├── ForgotPassword.jsx # Request reset link
 │   │   │   ├── ResetPassword.jsx  # Submit new password
 │   │   │   └── Profile.jsx     # Protected user profile & live API test
 │   │   ├── services/
-│   │   │   └── api.js          # Axios instance with JWT interceptor
+│   │   │   └── api.js          # Axios instance with JWT interceptor & auth methods
 │   │   ├── App.jsx             # Route definitions
 │   │   ├── main.jsx            # React root with providers
 │   │   └── index.css           # Coherent modern styling
@@ -73,16 +75,16 @@ mern-authentication-system/
 │   ├── config/
 │   │   └── db.js               # Mongoose database connection
 │   ├── controllers/
-│   │   └── authController.js   # Controllers for register, verify, login, reset, me
+│   │   └── authController.js   # Controllers for register, verify, resend, login, reset, me
 │   ├── middleware/
-│   │   └── authMiddleware.js   # JWT verification & req.user attachment
+│   │   └── authMiddleware.js   # protect middleware verifying Bearer tokens
 │   ├── models/
 │   │   └── User.js             # Mongoose user schema & methods
 │   ├── routes/
 │   │   └── authRoutes.js       # Express route endpoints
 │   ├── utils/
-│   │   └── sendEmail.js        # Nodemailer email transport utility
-│   ├── test-auth.js            # Automated test suite (46 assertion checks)
+│   │   └── sendEmail.js        # Nodemailer email transport & formatted dev logging
+│   ├── test-auth.js            # Automated test suite (52 assertion checks)
 │   ├── server.js               # Express application entry point
 │   ├── .env                    # Local environment variables
 │   ├── .env.example            # Environment template
@@ -123,7 +125,37 @@ EMAIL_FROM="MERN Auth System" <no-reply@mernauth.dev>
 
 > **Note on Email:** If `EMAIL_HOST`, `EMAIL_USER`, and `EMAIL_PASSWORD` are left blank, Nodemailer automatically creates a free **Ethereal test account**, outputs the preview URL in the terminal, and logs the direct verification/reset links to the backend console.
 
-### 3. Install Dependencies
+### 3. Development Email Terminal Logging
+
+In development mode (`NODE_ENV !== 'production'`), whenever a verification or password reset email is generated, the backend terminal prints a clear, formatted block containing both the Ethereal web inbox preview and the direct application link:
+
+```text
+========================================
+EMAIL SENT - VERIFICATION
+========================================
+Preview URL:
+https://ethereal.email/message/...
+
+Verification Link:
+http://localhost:5173/verify-email/...
+========================================
+```
+
+For password reset:
+
+```text
+========================================
+EMAIL SENT - PASSWORD RESET
+========================================
+Preview URL:
+https://ethereal.email/message/...
+
+Password Reset Link:
+http://localhost:5173/reset-password/...
+========================================
+```
+
+### 4. Install Dependencies
 Install server dependencies:
 ```bash
 cd server
@@ -136,7 +168,7 @@ cd ../client
 npm install
 ```
 
-### 4. Run the Application
+### 5. Run the Application
 Start the backend server (runs on `http://localhost:5000`):
 ```bash
 cd server
@@ -159,6 +191,7 @@ Open `http://localhost:5173` in your browser.
 | :--- | :--- | :--- | :--- |
 | `POST` | `/api/auth/register` | None (Public) | Validates input, hashes password, saves user as unverified, and sends verification email. |
 | `GET` | `/api/auth/verify-email/:token` | None (Public) | Verifies email token, marks `isVerified = true`, and invalidates token. |
+| `POST` | `/api/auth/resend-verification` | None (Public) | Generates a fresh verification token, replaces expired token, and resends verification email. |
 | `POST` | `/api/auth/login` | None (Public) | Verifies email & password, verifies account is activated, and returns signed JWT. |
 | `GET` | `/api/auth/me` | **Bearer JWT** (Private) | Verifies JWT via middleware and returns current authenticated user profile. |
 | `POST` | `/api/auth/forgot-password` | None (Public) | Generates 1-hour reset token and emails secure reset link. |
@@ -196,6 +229,30 @@ Axios Interceptor Injects 'Authorization: Bearer <token>'
 Protected Request -> [GET /api/auth/me]
       ↓
 authMiddleware Verifies JWT Signature -> req.user Populated -> Profile Rendered
+```
+
+---
+
+## Resend Verification Flow
+
+```text
+Login Fails (403 Forbidden: Unverified Account) OR Token Expired
+      ↓
+User Clicks "Resend verification email" -> [POST /api/auth/resend-verification]
+      ↓
+Backend Finds User by Normalized Email
+      ↓
+Checks isVerified:
+  ├─ If true  -> 400 Bad Request ("Account is already verified")
+  └─ If false -> Generates Fresh 32-Byte Crypto Token + 24-Hour Expiry
+      ↓
+Replaces user.verificationToken in MongoDB (Old Token Immediately Invalidated)
+      ↓
+Nodemailer Sends New Verification Email
+      ↓
+Terminal Displays Formatted Ethereal Preview & New Verification Link
+      ↓
+User Clicks New Link -> Account Successfully Verified
 ```
 
 ---
@@ -240,6 +297,7 @@ Old Password No Longer Works, New Password Successfully Logs In
    - Bounded token lifespan (`JWT_EXPIRES_IN=1d`).
 3. **Defense-in-Depth Token Invalidation**:
    - Both verification and password reset tokens are explicitly cleared (`undefined`) after successful use to prevent replay attacks.
+   - Resending a verification token replaces the old token, invalidating it immediately.
    - Tokens have strict expiration bounds (24 hours for email verification, 1 hour for password reset).
 4. **Data Sanitization & Exposure Prevention**:
    - Queries use `.select('-password')` to ensure hashed passwords are never returned in profile responses.
@@ -252,12 +310,10 @@ Old Password No Longer Works, New Password Successfully Logs In
 
 ## Automated Test Suite
 
-The repository includes a comprehensive test suite in `server/test-auth.js` covering 46 specific assertions across all authentication and security flows.
+The repository includes an automated test suite in `server/test-auth.js` covering 52 specific assertions across all authentication and security flows, including registration, unverified login rejection, email verification, token invalidation, resend verification, password reset, and route protection.
 
 To run the test suite:
 ```bash
 cd server
-node test-auth.js
+npm test
 ```
-
-All 46 assertions test valid flows, failure edge cases (duplicate email, mismatched passwords, expired tokens, unverified login blocks, invalid JWTs), and security integrity.

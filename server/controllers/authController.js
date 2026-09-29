@@ -71,8 +71,6 @@ const register = async (req, res) => {
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
     const verificationUrl = `${clientUrl}/verify-email/${verificationToken}`;
 
-    console.log(`[Email Verification Link for ${user.email}]: ${verificationUrl}`);
-
     // Send verification email
     try {
       await sendEmail({
@@ -91,11 +89,12 @@ const register = async (req, res) => {
             <p style="color: #4f46e5; word-break: break-all; font-size: 13px;">${verificationUrl}</p>
             <p style="color: #94a3b8; font-size: 12px; margin-top: 30px;">This verification link will expire in 24 hours.</p>
           </div>
-        `
+        `,
+        emailType: 'VERIFICATION',
+        actionUrl: verificationUrl
       });
     } catch (emailError) {
       console.error(`Email sending failed: ${emailError.message}`);
-      // Account created, token generated; user can still verify via logged link or request resend
     }
 
     return res.status(201).json({
@@ -154,6 +153,86 @@ const verifyEmail = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Server error during email verification'
+    });
+  }
+};
+
+/**
+ * @desc    Resend verification email with a fresh secure token
+ * @route   POST /api/auth/resend-verification
+ * @access  Public
+ */
+const resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide your email address'
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account found with this email address'
+      });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'This account has already been verified. Please log in.'
+      });
+    }
+
+    // Generate fresh verification token (replaces and invalidates old token)
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    user.verificationToken = verificationToken;
+    user.verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours fresh expiry
+    await user.save();
+
+    const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+    const verificationUrl = `${clientUrl}/verify-email/${verificationToken}`;
+
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: 'Verify Your Email Address - MERN Auth System',
+        text: `Hello ${user.name},\n\nPlease verify your email by clicking the following link:\n${verificationUrl}\n\nThis link will expire in 24 hours.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <h2 style="color: #4f46e5;">Verify Your Email Address</h2>
+            <p>Hi <strong>${user.name}</strong>,</p>
+            <p>You requested a new verification link. Please click below to verify your email address and activate your account:</p>
+            <div style="margin: 25px 0;">
+              <a href="${verificationUrl}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Verify Email Address</a>
+            </div>
+            <p style="color: #64748b; font-size: 14px;">Or copy and paste this link into your browser:</p>
+            <p style="color: #4f46e5; word-break: break-all; font-size: 13px;">${verificationUrl}</p>
+            <p style="color: #94a3b8; font-size: 12px; margin-top: 30px;">This verification link will expire in 24 hours.</p>
+          </div>
+        `,
+        emailType: 'VERIFICATION',
+        actionUrl: verificationUrl
+      });
+    } catch (emailError) {
+      console.error(`Email sending failed: ${emailError.message}`);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'A new verification email has been sent. Please check your inbox or terminal.'
+    });
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error resending verification email'
     });
   }
 };
@@ -280,8 +359,6 @@ const forgotPassword = async (req, res) => {
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
     const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
 
-    console.log(`[Password Reset Link for ${user.email}]: ${resetUrl}`);
-
     try {
       await sendEmail({
         to: user.email,
@@ -299,7 +376,9 @@ const forgotPassword = async (req, res) => {
             <p style="color: #4f46e5; word-break: break-all; font-size: 13px;">${resetUrl}</p>
             <p style="color: #94a3b8; font-size: 12px; margin-top: 30px;">This password reset link will expire in 1 hour. If you did not request this, you can safely ignore this email.</p>
           </div>
-        `
+        `,
+        emailType: 'PASSWORD RESET',
+        actionUrl: resetUrl
       });
     } catch (emailError) {
       console.error(`Password reset email failed: ${emailError.message}`);
@@ -391,6 +470,7 @@ const resetPassword = async (req, res) => {
 module.exports = {
   register,
   verifyEmail,
+  resendVerification,
   login,
   getMe,
   forgotPassword,
