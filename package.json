@@ -1,0 +1,11 @@
+{
+  "name": "mern-authentication-system",
+  "version": "1.0.0",
+  "description": "Secure MERN Stack Authentication System with JWT, Email Verification, Password Reset, and Protected Routes",
+  "scripts": {
+    "server": "npm --prefix server start",
+    "client": "npm --prefix client run dev"
+  },
+  "author": "Rohan Gupta",
+  "license": "ISC"
+}
